@@ -212,7 +212,7 @@ def plot_labeled_images(images, labels, idx, timestamp: str):
     # plt.tight_layout()
     output_dir = Path("tmp") / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
-    save_path = Path(output_dir) / f"vis_{idx}.png"
+    save_path = Path(output_dir) / f"vis_{idx}.jpg"
     plt.savefig(str(save_path))
 
 
@@ -490,7 +490,7 @@ if __name__ == "__main__":
     )
     pipe.set_progress_bar_config(disable=True)
 
-    slider_path = "outputs/models/fluxsliders/dev/flux-person-zoom"
+    slider_path = "outputs/fluxsliders/dev/flux-person-zoom"
     print("Loading...")
     for i in range(num_sliders):
         slider_full_path = f"{slider_path}/slider_{i}.pt"
@@ -537,4 +537,4 @@ if __name__ == "__main__":
             plot_labeled_images(slider_images, slider_scales, idx, timestamp)
 
     img_dir = Path("tmp") / timestamp
-    concat_imgs(img_dir, img_dir / "results.png", direction="vertical")
+    concat_imgs(img_dir, img_dir / "results.jpg", direction="vertical")
