@@ -10,6 +10,13 @@
 conda env create -f environment.yml
 ```
 
+### 下载flux-dev模型
+
+```bash
+huggingface-cli login
+huggingface-cli download --resume-download black-forest-labs/FLUX.1-dev --local-dir models/FLUX.1-dev
+```
+
 ### 训练
 
 直接执行以下命令，会训练person放大和缩小的slider lora。
@@ -26,4 +33,5 @@ python predict.py
 
 ### 推理结果
 
-![demo](assets/demo.jpg)
+![smiling_demo1](assets/smile_sliders_demo1.jpg)
+![smiling_demo2](assets/smile_sliders_demo2.jpg)

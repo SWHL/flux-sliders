@@ -49,9 +49,9 @@ TRAINING_METHODS = Literal[
 ]
 
 
-def load_ortho_dict(n):
-    path = f"./orthogonal_basis/{n:09}.ckpt"
-    if os.path.isfile(path):
+def load_ortho_dict(n, save_dir: Path):
+    path = save_dir / f"orthogonal_basis/{n:09}.ckpt"
+    if path.is_file():
         return torch.load(path)
 
     x = torch.randn(n, n)
@@ -62,13 +62,15 @@ def load_ortho_dict(n):
     return eig
 
 
-def init_ortho_proj(rank, weight):
+def init_ortho_proj(rank, weight, save_dir: Path):
     seed = torch.seed()
     torch.manual_seed(datetime.now().timestamp())
     q_index = torch.randint(high=weight.size(0), size=(rank,))
     torch.manual_seed(seed)
 
-    ortho_q_init = load_ortho_dict(weight.size(0)).to(dtype=weight.dtype)[:, q_index]
+    ortho_q_init = load_ortho_dict(weight.size(0), save_dir).to(dtype=weight.dtype)[
+        :, q_index
+    ]
     return nn.Parameter(ortho_q_init)
 
 
@@ -85,6 +87,7 @@ class LoRAModule(nn.Module):
         lora_dim=4,
         alpha=1,
         train_method="xattn",
+        save_dir: Optional[Path] = None,
     ):
         """if alpha == 0 or None, alpha is rank (no scaling)."""
         super().__init__()
@@ -113,7 +116,7 @@ class LoRAModule(nn.Module):
             )
             self.lora_up = nn.Conv2d(self.lora_dim, out_dim, (1, 1), (1, 1), bias=False)
 
-        if type(alpha) == torch.Tensor:
+        if isinstance(alpha, torch.Tensor):
             alpha = alpha.detach().numpy()
         alpha = lora_dim if alpha is None or alpha == 0 else alpha
         self.scale = alpha / self.lora_dim
@@ -124,7 +127,9 @@ class LoRAModule(nn.Module):
         if train_method == "full":
             nn.init.zeros_(self.lora_up.weight)
         else:
-            self.lora_up.weight = init_ortho_proj(lora_dim, self.lora_up.weight)
+            self.lora_up.weight = init_ortho_proj(
+                lora_dim, self.lora_up.weight, save_dir
+            )
             self.lora_up.weight.requires_grad_(False)
 
         self.multiplier = multiplier
@@ -151,7 +156,8 @@ class LoRANetwork(nn.Module):
         alpha: float = 1.0,
         train_method: TRAINING_METHODS = "full",
         layers=["Linear", "Conv"],
-    ) -> None:
+        save_dir: Optional[str] = None,
+    ):
         super().__init__()
         self.lora_scale = 1
         self.multiplier = multiplier
@@ -160,6 +166,7 @@ class LoRANetwork(nn.Module):
         self.train_method = train_method
         # LoRAのみ
         self.module = LoRAModule
+        self.save_dir = save_dir
 
         # unetのloraを作る
         self.unet_loras = self.create_modules(
@@ -271,7 +278,6 @@ class LoRANetwork(nn.Module):
                                 continue
                         lora_name = prefix + "." + name + "." + child_name
                         lora_name = lora_name.replace(".", "_")
-                        #                         print(f"{lora_name}")
                         lora = self.module(
                             lora_name,
                             child_module,
@@ -279,13 +285,11 @@ class LoRANetwork(nn.Module):
                             rank,
                             self.alpha,
                             train_method,
+                            save_dir=Path(self.save_dir),
                         )
-                        #                         print(name, child_name)
-                        #                         print(child_module.weight.shape)
                         if lora_name not in names:
                             loras.append(lora)
                             names.append(lora_name)
-        # print(f'@@@@@@@@@@@@@@@@@@@@@@@@@@@@ \n {names}')
         return loras
 
     def prepare_optimizer_params(self):

@@ -33,7 +33,6 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-from tqdm import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
 if is_torch_xla_available():
@@ -767,7 +766,7 @@ class FluxPipeline(DiffusionPipeline, FluxLoraLoaderMixin):
 
         # 6. Denoising loop
         with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(tqdm(timesteps)):
+            for i, t in enumerate(timesteps):
                 if self.interrupt:
                     continue
 

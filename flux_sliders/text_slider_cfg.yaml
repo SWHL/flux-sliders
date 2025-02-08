@@ -1,0 +1,40 @@
+pretrained_model_name_or_path: "models/FLUX.1-dev"
+
+device: "cuda:0"
+max_train_steps: 1000
+sample_every: 250
+num_inference_steps: 30
+guidance_scale: 3.5
+max_sequence_length: 512
+height: 512
+width: 512
+
+# timestep weighting
+weighting_scheme: "none"  # ["sigma_sqrt", "logit_normal", "mode", "cosmap", "none"]
+logit_mean: 0.0
+logit_std: 1.0
+mode_scale: 1.29
+bsz: 1
+lr: 0.002
+lr_warmup_steps: 200
+lr_num_cycles: 1
+lr_power: 1.0
+
+# Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]
+lr_scheduler: "constant"
+
+output_dir: "./outputs"
+
+slider_name: "person-smiling"
+target_prompt: "picture of a person"
+positive_prompt: "photo of a person, smiling, happy"
+negative_prompt: "photo of a person, frowning"
+
+# lora params
+alpha: 1
+rank: 16
+train_method: "xattn"
+num_sliders: 1
+
+# training params
+eta: 2
