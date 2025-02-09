@@ -2,7 +2,6 @@
 # - https://github.com/cloneofsimo/lora/blob/master/lora_diffusion/lora.py
 # - https://github.com/kohya-ss/sd-scripts/blob/main/networks/lora.py
 
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
@@ -315,7 +314,7 @@ class LoRANetwork(nn.Module):
                 v = v.detach().clone().to("cpu").to(dtype)
                 state_dict[key] = v
 
-        if os.path.splitext(file)[1] == ".safetensors":
+        if Path(file).suffix == ".safetensors":
             save_file(state_dict, file, metadata)
         else:
             torch.save(state_dict, file)

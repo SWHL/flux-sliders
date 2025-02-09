@@ -17,12 +17,14 @@ from diffusers import (
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import compute_density_for_timestep_sampling
 from omegaconf import OmegaConf
+from safetensors.torch import load_file
 from torch.optim import AdamW
 from tqdm.auto import tqdm
 from transformers import CLIPTokenizer, PretrainedConfig, T5TokenizerFast
 
 from .utils.custom_flux_pipeline import FluxPipeline
 from .utils.lora import LoRANetwork
+from .utils.utils import get_cur_timestamp, mkdir
 
 
 class FLUXTextSliders:
@@ -325,7 +327,7 @@ class FLUXTextSliders:
         save_weight_dir.mkdir(parents=True, exist_ok=True)
 
         for i in range(self.cfg.num_sliders):
-            save_weight_path = save_weight_dir / f"slider_{i}.pt"
+            save_weight_path = save_weight_dir / f"slider_{i}.safetensors"
             self.networks[i].save_weights(
                 str(save_weight_path), dtype=self.weight_dtype
             )
@@ -347,7 +349,12 @@ class FLUXTextSliders:
         self.params = params
 
     def load_lora_weights(self, slider_path: Union[str, Path], slider_idx: int = 0):
-        self.networks[slider_idx].load_state_dict(torch.load(str(slider_path)))
+        slider_path = Path(slider_path)
+        if slider_path.suffix == ".safetensors":
+            state_dict = load_file(slider_path)
+        else:
+            state_dict = torch.load(slider_path)
+        self.networks[slider_idx].load_state_dict(state_dict)
 
     def inference(
         self,
@@ -355,13 +362,26 @@ class FLUXTextSliders:
         step: Optional[int] = None,
         num_images: int = 1,
         slider_scales: Tuple[float] = (-5, -2.5, 0, 2.5, 5),
+        seed: Optional[int] = None,
     ):
-        seeds = [random.randint(0, 2**15) for _ in range(num_images)]
+        save_vis_dir = self.save_dir / "vis"
+        mkdir(save_vis_dir)
+
+        save_single_dir = save_vis_dir / "single"
+        save_single_dir.mkdir(parents=True, exist_ok=True)
+
+        if seed is None:
+            seeds = [random.randint(0, 2**15) for _ in range(num_images)]
+        else:
+            seeds = [seed] * num_images
+
         for i, network in self.networks.items():
             print(f"Slider {i}")
             for idx in range(num_images):
                 slider_images = []
                 seed = seeds[idx]
+
+                time_stamp = get_cur_timestamp()
                 for slider_scale in slider_scales:
                     network.set_lora_slider(scale=slider_scale)
                     with torch.no_grad():
@@ -381,8 +401,11 @@ class FLUXTextSliders:
                             skip_slider_timestep_till=0,  # this will skip adding the slider on the first step of generation ('1' will skip first 2 steps)
                         )
                     slider_images.append(image.images[0])
+                    image.images[0].save(
+                        save_single_dir / f"{time_stamp}_vis_{idx}_{slider_scale}.jpg"
+                    )
 
-                save_img_path = self.save_dir / f"vis_{idx}.jpg"
+                save_img_path = save_vis_dir / f"{time_stamp}_vis_{idx}.jpg"
 
                 if step is not None:
                     save_img_path = self.save_dir / f"{step}_vis_{idx}.jpg"
