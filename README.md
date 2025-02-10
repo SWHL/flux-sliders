@@ -35,3 +35,6 @@ python predict.py
 
 ![smiling_demo1](assets/smile_sliders_demo1.jpg)
 ![smiling_demo2](assets/smile_sliders_demo2.jpg)
+
+更多的Sliders结果：
+- [smile-sliders-flux-1d-lora](https://civitai.com/models/1230985/smile-sliders-flux-1d-lora)
