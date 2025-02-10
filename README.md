@@ -22,7 +22,7 @@ huggingface-cli download --resume-download black-forest-labs/FLUX.1-dev --local-
 直接执行以下命令，会训练人物由皱眉到微笑的sliders。
 
 ```bash
-python train_flux_concept_sliders.py
+python train_text_sliders.py
 ```
 
 ### 推理
