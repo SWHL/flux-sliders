@@ -1,11 +1,9 @@
+import copy
 from typing import Literal, Optional, Union
 
-import yaml
-
-
-from pydantic import BaseModel, root_validator
 import torch
-import copy
+import yaml
+from pydantic import BaseModel, root_validator
 
 ACTION_TYPES = Literal[
     "erase",

@@ -1,8 +1,8 @@
 pretrained_model_name_or_path: "models/FLUX.1-dev"
 
-device: "cuda:0"
+device: "cuda:1"
 max_train_steps: 1000
-sample_every: 250
+sample_every: 100
 num_inference_steps: 30
 guidance_scale: 3.5
 max_sequence_length: 512
@@ -25,10 +25,7 @@ lr_scheduler: "constant"
 
 output_dir: "./outputs"
 
-slider_name: "person-smiling"
-target_prompt: "picture of a person"
-positive_prompt: "photo of a person, smiling, happy"
-negative_prompt: "photo of a person, frowning"
+slider_name: "age_sliders"
 
 # lora params
 alpha: 1
@@ -38,3 +35,17 @@ num_sliders: 1
 
 # training params
 eta: 2
+
+prompt:
+  prompt1:
+    target_prompt: "male person"
+    positive_prompt: "male person, very old"
+    negative_prompt: "male person, very young"
+  prompt2:
+    target_prompt: "female person"
+    positive_prompt: "female person, very old"
+    negative_prompt: "female person, very young"
+  prompt3:
+    target_prompt: "a male person and a female person"
+    positive_prompt: "a male person and a female person, very old"
+    negative_prompt: "a male person and a female person, very young"

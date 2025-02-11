@@ -2,8 +2,9 @@
 import copy
 import random
 from contextlib import ExitStack
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,9 +27,30 @@ from .utils.custom_flux_pipeline import FluxPipeline
 from .utils.lora import LoRANetwork
 from .utils.utils import get_cur_timestamp, mkdir
 
+root_dir = Path(__file__).resolve().parent
+DEFAULT_TEXT_SLIDER_CONFIG = root_dir / "config" / "default_text_slider_cfg.yaml"
+
+
+@dataclass
+class PromptInputDataTriplet:
+    target_prompt: str
+    target_prompt_embeds: torch.Tensor
+    target_pooled_prompt_embeds: torch.Tensor
+    target_text_ids: torch.Tensor
+
+    positive_prompt: str
+    positive_prompt_embeds: torch.Tensor
+    positive_pooled_prompt_embeds: torch.Tensor
+    positive_text_ids: torch.Tensor
+
+    negative_prompt: str
+    negative_prompt_embeds: torch.Tensor
+    negative_pooled_prompt_embeds: torch.Tensor
+    negative_text_ids: torch.Tensor
+
 
 class FLUXTextSliders:
-    def __init__(self, config_file: Union[str, Path]):
+    def __init__(self, config_file: Union[str, Path] = DEFAULT_TEXT_SLIDER_CONFIG):
         print(f"Loading config from {config_file}")
 
         self.cfg = OmegaConf.load(config_file)
@@ -120,35 +142,7 @@ class FLUXTextSliders:
         self.export_cfg()
 
     def train(self):
-        with torch.no_grad():
-            (
-                prompt_embeds,
-                pooled_prompt_embeds,
-                text_ids,
-            ) = self.compute_text_embeddings(
-                [
-                    self.cfg.target_prompt,
-                    self.cfg.positive_prompt,
-                    self.cfg.negative_prompt,
-                ],
-                self.text_encoders,
-                self.tokenizers,
-                self.cfg.max_sequence_length,
-            )
-
-            (
-                target_prompt_embeds,
-                positive_prompt_embeds,
-                negative_prompt_embeds,
-            ) = prompt_embeds.chunk(3)
-
-            (
-                target_pooled_prompt_embeds,
-                positive_pooled_prompt_embeds,
-                negative_pooled_prompt_embeds,
-            ) = pooled_prompt_embeds.chunk(3)
-
-            target_text_ids, positive_text_ids, negative_text_ids = text_ids.chunk(3)
+        promt_input_data = self.get_input()
 
         self.init_lora()
         optimizer = AdamW(self.params, lr=self.cfg.lr)
@@ -166,7 +160,9 @@ class FLUXTextSliders:
         progress_bar = tqdm(range(0, self.cfg.max_train_steps), desc="Steps")
 
         losses = {}
-        for epoch in range(self.cfg.max_train_steps):
+        for step in range(self.cfg.max_train_steps):
+            prompt_data = random.choice(promt_input_data)
+
             u = compute_density_for_timestep_sampling(
                 weighting_scheme=self.cfg.weighting_scheme,
                 batch_size=self.cfg.bsz,
@@ -194,7 +190,7 @@ class FLUXTextSliders:
 
             with torch.no_grad():
                 packed_noisy_model_input = self.pipe(
-                    self.cfg.target_prompt,
+                    prompt_data.target_prompt,
                     height=self.cfg.height,
                     width=self.cfg.width,
                     guidance_scale=self.cfg.guidance_scale,
@@ -208,7 +204,7 @@ class FLUXTextSliders:
                 )
                 vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels))
 
-                if epoch == 0:
+                if step == 0:
                     model_input = FluxPipeline._unpack_latents(
                         packed_noisy_model_input,
                         height=self.cfg.height,
@@ -234,16 +230,15 @@ class FLUXTextSliders:
                 guidance = None
 
             with ExitStack() as stack:
-                for net in self.networks:
-                    stack.enter_context(self.networks[net])
+                stack.enter_context(self.network)
 
                 model_pred = self.transformer(
                     hidden_states=packed_noisy_model_input,
                     timestep=timesteps / 1000,
                     guidance=guidance,
-                    pooled_projections=target_pooled_prompt_embeds,
-                    encoder_hidden_states=target_prompt_embeds,
-                    txt_ids=target_text_ids,
+                    pooled_projections=prompt_data.target_pooled_prompt_embeds,
+                    encoder_hidden_states=prompt_data.target_prompt_embeds,
+                    txt_ids=prompt_data.target_text_ids,
                     img_ids=latent_image_ids,
                     return_dict=False,
                 )[0]
@@ -257,9 +252,9 @@ class FLUXTextSliders:
 
             with torch.no_grad():
                 target_pred = self.get_transformer_output(
-                    target_prompt_embeds,
-                    target_pooled_prompt_embeds,
-                    target_text_ids,
+                    prompt_data.target_prompt_embeds,
+                    prompt_data.target_pooled_prompt_embeds,
+                    prompt_data.target_text_ids,
                     timesteps,
                     packed_noisy_model_input,
                     vae_scale_factor,
@@ -268,9 +263,9 @@ class FLUXTextSliders:
                     guidance,
                 )
                 positive_pred = self.get_transformer_output(
-                    positive_prompt_embeds,
-                    positive_pooled_prompt_embeds,
-                    positive_text_ids,
+                    prompt_data.positive_prompt_embeds,
+                    prompt_data.positive_pooled_prompt_embeds,
+                    prompt_data.positive_text_ids,
                     timesteps,
                     packed_noisy_model_input,
                     vae_scale_factor,
@@ -279,9 +274,9 @@ class FLUXTextSliders:
                     guidance,
                 )
                 negative_pred = self.get_transformer_output(
-                    negative_prompt_embeds,
-                    negative_pooled_prompt_embeds,
-                    negative_text_ids,
+                    prompt_data.negative_prompt_embeds,
+                    prompt_data.negative_pooled_prompt_embeds,
+                    prompt_data.negative_text_ids,
                     timesteps,
                     packed_noisy_model_input,
                     vae_scale_factor,
@@ -316,36 +311,85 @@ class FLUXTextSliders:
             progress_bar.update(1)
             progress_bar.set_postfix(**logs)
 
-            if epoch % self.cfg.sample_every == 0:
-                self.inference(self.cfg.target_prompt, step=epoch)
+            if step % self.cfg.sample_every == 0:
+                self.save_lora_weights(name_suffix=f"{step:06d}")
+                self.inference(prompt_data.target_prompt, step=f"{step:06d}")
 
-        print("Training Done")
         self.plot_history(losses)
+        self.save_lora_weights(name_suffix="latest")
 
-        print("Saving...")
+    def get_input(self) -> List[PromptInputDataTriplet]:
+        prompt_inputs = []
+        for v in self.cfg.prompt.values():
+            with torch.no_grad():
+                (
+                    prompt_embeds,
+                    pooled_prompt_embeds,
+                    text_ids,
+                ) = self.compute_text_embeddings(
+                    [
+                        v.target_prompt,
+                        v.positive_prompt,
+                        v.negative_prompt,
+                    ],
+                    self.text_encoders,
+                    self.tokenizers,
+                    self.cfg.max_sequence_length,
+                )
+
+                (
+                    target_prompt_embeds,
+                    positive_prompt_embeds,
+                    negative_prompt_embeds,
+                ) = prompt_embeds.chunk(3)
+
+                (
+                    target_pooled_prompt_embeds,
+                    positive_pooled_prompt_embeds,
+                    negative_pooled_prompt_embeds,
+                ) = pooled_prompt_embeds.chunk(3)
+
+                target_text_ids, positive_text_ids, negative_text_ids = text_ids.chunk(
+                    3
+                )
+            prompt_inputs.append(
+                PromptInputDataTriplet(
+                    v.target_prompt,
+                    target_prompt_embeds,
+                    target_pooled_prompt_embeds,
+                    target_text_ids,
+                    v.positive_prompt,
+                    positive_prompt_embeds,
+                    positive_pooled_prompt_embeds,
+                    positive_text_ids,
+                    v.negative_prompt,
+                    negative_prompt_embeds,
+                    negative_pooled_prompt_embeds,
+                    negative_text_ids,
+                )
+            )
+        return prompt_inputs
+
+    def save_lora_weights(self, name_suffix: str):
         save_weight_dir = self.save_dir / "weights"
         save_weight_dir.mkdir(parents=True, exist_ok=True)
-
-        for i in range(self.cfg.num_sliders):
-            save_weight_path = save_weight_dir / f"slider_{i}.safetensors"
-            self.networks[i].save_weights(
-                str(save_weight_path), dtype=self.weight_dtype
-            )
-        print("Done.")
+        save_weight_path = (
+            save_weight_dir / f"flux-{self.cfg.slider_name}_{name_suffix}.safetensors"
+        )
+        self.network.save_weights(str(save_weight_path), dtype=self.weight_dtype)
 
     def init_lora(self):
-        networks, params = {}, []
-        for i in range(self.cfg.num_sliders):
-            networks[i] = LoRANetwork(
-                self.transformer,
-                rank=self.cfg.rank,
-                multiplier=1.0,
-                alpha=self.cfg.alpha,
-                train_method=self.cfg.train_method,
-                save_dir=self.save_dir,
-            ).to(self.cfg.device, dtype=self.weight_dtype)
-            params.extend(networks[i].prepare_optimizer_params())
-        self.networks = networks
+        params = []
+        network = LoRANetwork(
+            self.transformer,
+            rank=self.cfg.rank,
+            multiplier=1.0,
+            alpha=self.cfg.alpha,
+            train_method=self.cfg.train_method,
+            save_dir=self.save_dir,
+        ).to(self.cfg.device, dtype=self.weight_dtype)
+        params.extend(network.prepare_optimizer_params())
+        self.network = network
         self.params = params
 
     def load_lora_weights(self, slider_path: Union[str, Path], slider_idx: int = 0):
@@ -354,7 +398,7 @@ class FLUXTextSliders:
             state_dict = load_file(slider_path)
         else:
             state_dict = torch.load(slider_path)
-        self.networks[slider_idx].load_state_dict(state_dict)
+        self.network.load_state_dict(state_dict)
 
     def inference(
         self,
@@ -364,7 +408,7 @@ class FLUXTextSliders:
         slider_scales: Tuple[float] = (-5, -2.5, 0, 2.5, 5),
         seed: Optional[int] = None,
     ):
-        save_vis_dir = self.save_dir / "vis"
+        save_vis_dir = self.save_dir / "sample"
         mkdir(save_vis_dir)
 
         save_single_dir = save_vis_dir / "single"
@@ -375,44 +419,42 @@ class FLUXTextSliders:
         else:
             seeds = [seed] * num_images
 
-        for i, network in self.networks.items():
-            print(f"Slider {i}")
-            for idx in range(num_images):
-                slider_images = []
-                seed = seeds[idx]
+        for idx in range(num_images):
+            slider_images = []
+            seed = seeds[idx]
 
-                time_stamp = get_cur_timestamp()
-                for slider_scale in slider_scales:
-                    network.set_lora_slider(scale=slider_scale)
-                    with torch.no_grad():
-                        image = self.pipe(
-                            target_prompt,
-                            height=self.cfg.height,
-                            width=self.cfg.width,
-                            guidance_scale=self.cfg.guidance_scale,
-                            num_inference_steps=self.cfg.num_inference_steps,
-                            max_sequence_length=self.cfg.max_sequence_length,
-                            num_images_per_prompt=1,
-                            generator=torch.Generator().manual_seed(seed),
-                            from_timestep=0,
-                            till_timestep=None,
-                            output_type="pil",
-                            network=network,
-                            skip_slider_timestep_till=0,  # this will skip adding the slider on the first step of generation ('1' will skip first 2 steps)
-                        )
-                    slider_images.append(image.images[0])
-                    image.images[0].save(
-                        save_single_dir / f"{time_stamp}_vis_{idx}_{slider_scale}.jpg"
+            time_stamp = get_cur_timestamp()
+            for slider_scale in slider_scales:
+                self.network.set_lora_slider(scale=slider_scale)
+                with torch.no_grad():
+                    image = self.pipe(
+                        target_prompt,
+                        height=self.cfg.height,
+                        width=self.cfg.width,
+                        guidance_scale=self.cfg.guidance_scale,
+                        num_inference_steps=self.cfg.num_inference_steps,
+                        max_sequence_length=self.cfg.max_sequence_length,
+                        num_images_per_prompt=1,
+                        generator=torch.Generator().manual_seed(seed),
+                        from_timestep=0,
+                        till_timestep=None,
+                        output_type="pil",
+                        network=self.network,
+                        skip_slider_timestep_till=0,  # this will skip adding the slider on the first step of generation ('1' will skip first 2 steps)
                     )
-
-                save_img_path = save_vis_dir / f"{time_stamp}_vis_{idx}.jpg"
-
-                if step is not None:
-                    save_img_path = self.save_dir / f"{step}_vis_{idx}.jpg"
-
-                self.plot_labeled_images(
-                    slider_images, slider_scales, idx, save_img_path
+                gen_img = image.images[0]
+                slider_images.append(gen_img)
+                gen_img.save(
+                    save_single_dir / f"{time_stamp}_img_{idx}_scale_{slider_scale}.jpg"
                 )
+
+            save_img_path = save_vis_dir / f"{time_stamp}_img_{idx}.jpg"
+
+            if step is not None:
+                save_img_path = save_vis_dir / f"{step}_img_{idx}.jpg"
+
+            self.plot_labeled_images(slider_images, slider_scales, idx, save_img_path)
+        return slider_images[0]
 
     def get_transformer_output(
         self,
@@ -507,6 +549,7 @@ class FLUXTextSliders:
             axes[i].axis("off")
             axes[i].set_title(label)
 
+        plt.tight_layout(w_pad=5)
         plt.savefig(str(save_img_path))
         print(save_img_path)
 
