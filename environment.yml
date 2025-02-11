@@ -1,4 +1,4 @@
-name: flux-sliders
+name: flux_sliders
 channels:
   - conda-forge
 dependencies:
@@ -271,4 +271,4 @@ dependencies:
       - yarl==1.18.3
       - yt-dlp==2024.12.23
       - zipp==3.21.0
-prefix: /home/user/xxxx/miniforge3/envs/flux-sliders
+prefix: /home/user/xxxx/miniforge3/envs/flux_sliders
