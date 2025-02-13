@@ -4,6 +4,11 @@
 
 代码仍在快速迭代中，目标是兼容diffuers库，可以与现有flux生态整合。
 
+### TODO
+
+- [ ] 支持diffusers直接推理
+- [ ] 支持ComfyUI推理
+
 ### 安装环境
 
 ```bash
