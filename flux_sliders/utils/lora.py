@@ -7,9 +7,11 @@ from pathlib import Path
 from typing import List, Literal, Optional
 
 import torch
-import torch.nn as nn
 from diffusers import UNet2DConditionModel
 from safetensors.torch import save_file
+from torch import nn
+
+from .convert_lora_to_peft_format import ConvertLoRAToPEFT
 
 UNET_TARGET_REPLACE_MODULE_TRANSFORMER = [
     #     "Transformer2DModel",  # どうやらこっちの方らしい？ # attn1, 2
@@ -241,15 +243,19 @@ class LoRANetwork(nn.Module):
             ]:  # Cross Attention
                 if "attn" not in name:
                     continue
+
                 if train_method == "xattn-up":
                     if "up_block" not in name:
                         continue
+
                 if train_method == "xattn-down":
                     if "down_block" not in name:
                         continue
+
                 if train_method == "xattn-mid":
                     if "mid_block" not in name:
                         continue
+
             elif train_method == "full":  # 全部学習
                 pass
             else:
@@ -265,9 +271,11 @@ class LoRANetwork(nn.Module):
                                 continue
                             if "to_q" in child_name:
                                 continue
+
                         if train_method == "noxattn-hspace":
                             if "mid_block" not in name:
                                 continue
+
                         if train_method == "noxattn-hspace-last":
                             if (
                                 "mid_block" not in name
@@ -275,6 +283,7 @@ class LoRANetwork(nn.Module):
                                 or "conv2" not in child_name
                             ):
                                 continue
+
                         lora_name = prefix + "." + name + "." + child_name
                         lora_name = lora_name.replace(".", "_")
                         lora = self.module(
@@ -316,6 +325,7 @@ class LoRANetwork(nn.Module):
 
         if Path(file).suffix == ".safetensors":
             save_file(state_dict, file, metadata)
+            ConvertLoRAToPEFT()(lora_path=file, state_dict=state_dict, save_path=file)
         else:
             torch.save(state_dict, file)
 

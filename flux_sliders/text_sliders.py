@@ -27,9 +27,6 @@ from .utils.custom_flux_pipeline import FluxPipeline
 from .utils.lora import LoRANetwork
 from .utils.utils import get_cur_timestamp, mkdir
 
-root_dir = Path(__file__).resolve().parent
-DEFAULT_TEXT_SLIDER_CONFIG = root_dir / "config" / "default_text_slider_cfg.yaml"
-
 
 @dataclass
 class PromptInputDataTriplet:
@@ -50,7 +47,7 @@ class PromptInputDataTriplet:
 
 
 class FLUXTextSliders:
-    def __init__(self, config_file: Union[str, Path] = DEFAULT_TEXT_SLIDER_CONFIG):
+    def __init__(self, config_file: Union[str, Path]):
         print(f"Loading config from {config_file}")
 
         self.cfg = OmegaConf.load(config_file)
@@ -145,6 +142,7 @@ class FLUXTextSliders:
         promt_input_data = self.get_input()
 
         self.init_lora()
+
         optimizer = AdamW(self.params, lr=self.cfg.lr)
         optimizer.zero_grad()
 
