@@ -11,6 +11,12 @@
 - [ ] 多个slider lora融合
 - [ ] slider scale与原本lora scale的关系探究？
 
+### 推荐显存
+
+~80G
+
+可以自行将FLUX模型替换为量化后的FLUX模型
+
 ### 安装环境
 
 ```bash
