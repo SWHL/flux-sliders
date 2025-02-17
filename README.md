@@ -8,6 +8,8 @@
 
 - [x] 支持diffusers直接推理
 - [ ] 支持ComfyUI推理
+- [ ] 多个slider lora融合
+- [ ] slider scale与原本lora scale的关系探究？
 
 ### 安装环境
 
