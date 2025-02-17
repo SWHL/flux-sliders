@@ -1,13 +1,18 @@
-## flux sliders
+## FLUX Sliders
 
 修改自<https://github.com/rohitgandikota/sliders>
 
-代码仍在快速迭代中，目标是兼容diffuers库，可以与现有flux生态整合。
+⚠️注意：代码仍在快速迭代中，欢迎加入。
+
+当前代码训练所得模型：
+
+- 可以直接放在**Comfy/models/loras**下被加载使用。但是`slider scale`暂时不知如何插入进去。
+- 可以直接使用diffusers库来推理
 
 ### TODO
 
 - [x] 支持diffusers直接推理
-- [ ] 支持ComfyUI推理
+- [x] 支持ComfyUI推理
 - [ ] 多个slider lora融合
 - [ ] slider scale与原本lora scale的关系探究？
 
@@ -83,3 +88,4 @@ for scale in scales:
 
 - [smile-sliders-flux-1d-lora](https://civitai.com/models/1230985/smile-sliders-flux-1d-lora)
 - [age-sliders-flux-1d-lora](https://civitai.com/models/1242004/age-sliders-flux-1d-lora)
+- [hair-sliders-flux-1d-lora](https://civitai.com/models/1245348/hair-sliders-flux-1d-lora)
