@@ -13,7 +13,7 @@
 
 - [x] 支持diffusers直接推理
 - [x] 支持ComfyUI推理
-- [ ] 多个slider lora融合
+- [x] 多个slider lora融合
 - [ ] slider scale与原本lora scale的关系探究？
 
 ### 推荐显存
@@ -45,7 +45,9 @@ python train_text_sliders.py
 
 ### 推理
 
-```bash
+单个slider LoRA使用
+
+```python
 from datetime import datetime
 from pathlib import Path
 
@@ -59,6 +61,48 @@ pipe.load_lora_weights(lora_path)
 
 time_stamp = datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S")
 save_dir = Path("outputs") / time_stamp
+save_dir.mkdir(parents=True, exist_ok=True)
+
+scales = (-5, -2.5, 0, 2.5, 5)
+prompt = "female person"
+
+for scale in scales:
+    out = pipe(
+        prompt=prompt,
+        guidance_scale=3.5,
+        height=512,
+        width=512,
+        num_inference_steps=25,
+        joint_attention_kwargs={"scale": scale * 1 / 16},
+        generator=torch.Generator().manual_seed(42),
+    ).images[0]
+
+    save_img_path = save_dir / f"{time_stamp}_scale_{scale}.jpg"
+    out.save(save_img_path)
+```
+
+多个sliders LoRA结合使用
+
+```python
+from datetime import datetime
+from pathlib import Path
+
+import torch
+from diffusers import FluxPipeline
+
+pipe = FluxPipeline.from_pretrained("models/FLUX.1-dev", torch_dtype=torch.bfloat16)
+pipe.to("cuda:1")
+
+hair_lora_path = "flux-hair_sliders_latest_multiplied_1.0.safetensors"
+smile_lora_path = "flux-smile_sliders_latest_multiplied_1.0.safetensors"
+
+pipe.load_lora_weights(hair_lora_path, adapter_name="hair")
+pipe.load_lora_weights(smile_lora_path, adapter_name="smile")
+
+pipe.set_adapters(["hair", "smile"], adapter_weights=[1.0, 1.0])
+
+time_stamp = datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S")
+save_dir = Path("outputs/tmp") / time_stamp
 save_dir.mkdir(parents=True, exist_ok=True)
 
 scales = (-5, -2.5, 0, 2.5, 5)
